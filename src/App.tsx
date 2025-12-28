@@ -8,14 +8,15 @@ import './App.css'
 const store = createXRStore()
 
 // ゲーム設定
-const GAME_WIDTH = 2
-const GAME_HEIGHT = 1.5
-const PADDLE_WIDTH = 0.1
-const PADDLE_HEIGHT = 0.4
-const BALL_SIZE = 0.05  // 小さくした
-const BALL_SPEED = 0.8  // 遅くした
-const PADDLE_SPEED = 2
-const AI_SPEED = 1.5    // AIの移動速度
+const GAME_SCALE = 0.5  // ゲーム全体のスケール（1.0 = 元のサイズ、0.5 = 半分）
+const GAME_WIDTH = 2 * GAME_SCALE
+const GAME_HEIGHT = 1.5 * GAME_SCALE
+const PADDLE_WIDTH = 0.1 * GAME_SCALE
+const PADDLE_HEIGHT = 0.4 * GAME_SCALE
+const BALL_SIZE = 0.05 * GAME_SCALE
+const BALL_SPEED = 0.8 * GAME_SCALE
+const PADDLE_SPEED = 2 * GAME_SCALE
+const AI_SPEED = 1.5 * GAME_SCALE
 
 // Audio context for sound effects
 let audioContext: AudioContext | null = null
@@ -55,8 +56,8 @@ const playScore = () => {
 
 // 3D PONGゲーム（固定位置に配置）
 function PongGame() {
-  // ゲームの配置位置（プレイヤーの前方1.5m、目線の高さ1.2m）
-  const gamePosition = new THREE.Vector3(0, 1.2, -1.5)
+  // ゲームの配置位置（プレイヤーの前方1.5m、目線の高さ0.5m）
+  const gamePosition = new THREE.Vector3(0, 0.5, -1.5)
   const gameQuaternion = new THREE.Quaternion()
   
   // ゲームモード（1人用 or 2人用）
@@ -131,8 +132,8 @@ function PongGame() {
     if (isGameOver) return
     
     // パドルの移動
-    // 右コントローラー → 左パドル（赤）
-    const newLeftY = leftPaddleY + rightControllerY.current * PADDLE_SPEED * delta
+    // 左コントローラー → 左パドル（赤）
+    const newLeftY = leftPaddleY + leftControllerY.current * PADDLE_SPEED * delta
     setLeftPaddleY(Math.max(-GAME_HEIGHT / 2 + PADDLE_HEIGHT / 2, Math.min(GAME_HEIGHT / 2 - PADDLE_HEIGHT / 2, newLeftY)))
     
     // 右パドル（青）の移動
@@ -144,8 +145,8 @@ function PongGame() {
       const newRightY = rightPaddleY + aiMove
       setRightPaddleY(Math.max(-GAME_HEIGHT / 2 + PADDLE_HEIGHT / 2, Math.min(GAME_HEIGHT / 2 - PADDLE_HEIGHT / 2, newRightY)))
     } else {
-      // 2人用モード：左コントローラー → 右パドル（青）
-      const newRightY = rightPaddleY + leftControllerY.current * PADDLE_SPEED * delta
+      // 2人用モード：右コントローラー → 右パドル（青）
+      const newRightY = rightPaddleY + rightControllerY.current * PADDLE_SPEED * delta
       setRightPaddleY(Math.max(-GAME_HEIGHT / 2 + PADDLE_HEIGHT / 2, Math.min(GAME_HEIGHT / 2 - PADDLE_HEIGHT / 2, newRightY)))
     }
     
@@ -181,7 +182,7 @@ function PongGame() {
       const newScore = rightScore + 1
       setRightScore(newScore)
       playScore()
-      if (newScore >= 5) {
+      if (newScore >= 3) {
         setIsGameOver(true)
       } else {
         resetBall()
@@ -190,7 +191,7 @@ function PongGame() {
       const newScore = leftScore + 1
       setLeftScore(newScore)
       playScore()
-      if (newScore >= 5) {
+      if (newScore >= 3) {
         setIsGameOver(true)
       } else {
         resetBall()
@@ -213,7 +214,7 @@ function PongGame() {
       {/* ゲームボードの背景 */}
       <mesh position={[0, GAME_HEIGHT / 2, -0.1]}>
         <planeGeometry args={[GAME_WIDTH + 0.4, GAME_HEIGHT + 0.4]} />
-        <meshStandardMaterial color="#1a1a2e" />
+        <meshStandardMaterial color="#228B22" />
       </mesh>
       
       {/* モード表示 */}
@@ -284,7 +285,7 @@ function PongGame() {
       
       {/* ゲームオーバー表示 */}
       {isGameOver && (
-        <group position={[0, GAME_HEIGHT / 2, 0.3]} rotation={[0, Math.PI, 0]}>
+        <group position={[0, GAME_HEIGHT / 2, 0.3]} rotation={[0, 0, 0]}>
           {/* 背景パネル */}
           <mesh position={[0, 0, -0.05]}>
             <planeGeometry args={[1.5, 0.8]} />
@@ -309,14 +310,14 @@ function PongGame() {
           <Text
             position={[0, 0, 0]}
             fontSize={0.1}
-            color={leftScore >= 10 ? "#ff6b6b" : "#4ecdc4"}
+            color={leftScore >= 3 ? "#ff6b6b" : "#4ecdc4"}
             anchorX="center"
             anchorY="middle"
             font="./ipaexg.ttf"
             outlineWidth={0.005}
             outlineColor="#ffffff"
           >
-            {leftScore >= 10 ? "RIGHT PLAYER WIN!" : "LEFT PLAYER WIN!"}
+            {leftScore >= 3 ? "LEFT PLAYER WIN!" : "RIGHT PLAYER WIN!"}
           </Text>
           
           {/* リセット指示 */}
