@@ -1,31 +1,11 @@
 import { Canvas, useFrame } from '@react-three/fiber'
 import { createXRStore, XR, XROrigin } from '@react-three/xr'
 import { Text } from '@react-three/drei'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import * as THREE from 'three'
 import './App.css'
 
 const store = createXRStore()
-
-// アンカーをlocalStorageに保存・取得
-const ANCHOR_KEY = 'webxr_anchor_data'
-
-function saveAnchorData(position: [number, number, number], quaternion: [number, number, number, number]) {
-  const data = { position, quaternion }
-  localStorage.setItem(ANCHOR_KEY, JSON.stringify(data))
-}
-
-function loadAnchorData() {
-  const data = localStorage.getItem(ANCHOR_KEY)
-  if (data) {
-    try {
-      return JSON.parse(data)
-    } catch (e) {
-      return null
-    }
-  }
-  return null
-}
 
 // ゲーム設定
 const GAME_WIDTH = 2
@@ -73,11 +53,12 @@ const playScore = () => {
   setTimeout(() => playSound(659, 0.15, 'triangle'), 100)
 }
 
-// 3D PONGゲーム（アンカー位置を基準に配置）
-function PongGame({ anchorPosition, anchorQuaternion }: { 
-  anchorPosition: THREE.Vector3, 
-  anchorQuaternion: THREE.Quaternion 
-}) {
+// 3D PONGゲーム（固定位置に配置）
+function PongGame() {
+  // ゲームの配置位置（プレイヤーの前方1.5m、目線の高さ1.2m）
+  const gamePosition = new THREE.Vector3(0, 1.2, -1.5)
+  const gameQuaternion = new THREE.Quaternion()
+  
   // ゲームモード（1人用 or 2人用）
   const [isOnePlayerMode, setIsOnePlayerMode] = useState(true)
   const modeSwitchPressed = useRef(false)
@@ -228,7 +209,7 @@ function PongGame({ anchorPosition, anchorQuaternion }: {
   }
 
   return (
-    <group position={anchorPosition} quaternion={anchorQuaternion}>
+    <group position={gamePosition} quaternion={gameQuaternion}>
       {/* ゲームボードの背景 */}
       <mesh position={[0, GAME_HEIGHT / 2, -0.1]}>
         <planeGeometry args={[GAME_WIDTH + 0.4, GAME_HEIGHT + 0.4]} />
@@ -357,146 +338,21 @@ function PongGame({ anchorPosition, anchorQuaternion }: {
 }
 
 function Scene() {
-  const [anchorPosition, setAnchorPosition] = useState<THREE.Vector3 | null>(null)
-  const [anchorQuaternion, setAnchorQuaternion] = useState<THREE.Quaternion | null>(null)
-  const reticleRef = useRef<THREE.Group>(null)
-  const hitTestSourceRef = useRef<XRHitTestSource | null>(null)
-  const triggerPressedRef = useRef(false)
-
-  useEffect(() => {
-    // 保存されたアンカーデータを読み込む
-    const savedData = loadAnchorData()
-    if (savedData) {
-      setAnchorPosition(new THREE.Vector3(...savedData.position))
-      setAnchorQuaternion(new THREE.Quaternion(...savedData.quaternion))
-      console.log('Loaded saved anchor:', savedData)
-    }
-  }, [])
-
-  useFrame((state) => {
-    const session = (state.gl as any).xr?.getSession?.()
-    if (!session) return
-
-    // ヒットテストソースの初期化
-    if (!hitTestSourceRef.current && session.requestHitTestSource && !anchorPosition) {
-      session.requestReferenceSpace('viewer').then((viewerSpace: XRReferenceSpace) => {
-        session.requestHitTestSource({ space: viewerSpace }).then((source: XRHitTestSource) => {
-          hitTestSourceRef.current = source
-        })
-      })
-    }
-
-    // コントローラのトリガーボタンをチェック
-    if (!anchorPosition) {
-      const inputSources = session.inputSources
-      if (inputSources && inputSources.length > 0) {
-        for (const inputSource of inputSources) {
-          if (inputSource.gamepad) {
-            const triggerButton = inputSource.gamepad.buttons[0]
-            
-            // トリガーが押された瞬間を検出
-            if (triggerButton.pressed && !triggerPressedRef.current) {
-              triggerPressedRef.current = true
-              
-              // レティクルが表示されていればアンカーを設定
-              if (reticleRef.current && reticleRef.current.visible) {
-                const position = reticleRef.current.position.clone()
-                const quaternion = reticleRef.current.quaternion.clone()
-                
-                setAnchorPosition(position)
-                setAnchorQuaternion(quaternion)
-                
-                // アンカー情報を保存
-                saveAnchorData(
-                  [position.x, position.y, position.z],
-                  [quaternion.x, quaternion.y, quaternion.z, quaternion.w]
-                )
-                
-                console.log('Anchor set at:', position)
-              }
-            } else if (!triggerButton.pressed) {
-              triggerPressedRef.current = false
-            }
-          }
-        }
-      }
-    }
-
-    // アンカーが設定されていない場合のみヒットテストを実行
-    if (!anchorPosition && hitTestSourceRef.current && reticleRef.current) {
-      const frame = state.gl.xr.getFrame()
-      if (frame) {
-        const referenceSpace = (state.gl as any).xr.getReferenceSpace()
-        const hitTestResults = frame.getHitTestResults(hitTestSourceRef.current)
-        
-        if (hitTestResults.length > 0) {
-          const hit = hitTestResults[0]
-          const pose = hit.getPose(referenceSpace)
-          
-          if (pose) {
-            const matrix = new THREE.Matrix4().fromArray(pose.transform.matrix)
-            const position = new THREE.Vector3()
-            const quaternion = new THREE.Quaternion()
-            const scale = new THREE.Vector3()
-            matrix.decompose(position, quaternion, scale)
-            
-            reticleRef.current.position.copy(position)
-            reticleRef.current.quaternion.copy(quaternion)
-            reticleRef.current.visible = true
-          }
-        } else {
-          reticleRef.current.visible = false
-        }
-      }
-    }
-  })
-
   return (
     <>
       <ambientLight intensity={0.5} />
       <directionalLight position={[2, 3, 2]} intensity={1} />
       
-      {/* レティクル（アンカー未設定時のみ表示） */}
-      {!anchorPosition && (
-        <group ref={reticleRef} visible={false}>
-          {/* リング */}
-          <mesh rotation={[Math.PI / 2, 0, 0]}>
-            <ringGeometry args={[0.08, 0.1, 32]} />
-            <meshBasicMaterial color="#ffffff" side={THREE.DoubleSide} />
-          </mesh>
-          {/* 中央の点 */}
-          <mesh>
-            <sphereGeometry args={[0.01, 16, 16]} />
-            <meshBasicMaterial color="#ff0000" />
-          </mesh>
-          {/* 方向を示す矢印 */}
-          <mesh position={[0, 0.05, 0]}>
-            <coneGeometry args={[0.02, 0.05, 8]} />
-            <meshBasicMaterial color="#00ff00" />
-          </mesh>
-        </group>
-      )}
-      
-      {/* アンカーが設定されたらゲーム開始 */}
-      {anchorPosition && anchorQuaternion && (
-        <PongGame anchorPosition={anchorPosition} anchorQuaternion={anchorQuaternion} />
-      )}
+      {/* ゲーム開始 */}
+      <PongGame />
     </>
   )
 }
 
 function App() {
-  const clearAnchor = () => {
-    localStorage.removeItem(ANCHOR_KEY)
-    window.location.reload()
-  }
-
   return (
     <>
       <button onClick={() => store.enterAR()}>Enter AR</button>
-      <button onClick={clearAnchor} style={{ left: '20px', transform: 'none' }}>
-        Reset Game
-      </button>
       <Canvas camera={{ position: [0, 0, 8], fov: 60 }}>
         <XR store={store}>
           <XROrigin position={[0, 0, 0]} />
